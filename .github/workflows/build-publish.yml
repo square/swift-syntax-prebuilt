@@ -1,0 +1,85 @@
+name: Build and Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The apple/swift-syntax version to build and publish as a prebuilt binary'
+        required: true
+        type: string
+
+jobs:
+  build-publish:
+    runs-on: macos-13
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUILD_TARGET: //:SwiftSyntax_opt
+      ARCHIVE_NAME: swift-syntax-${{ github.event.inputs.tag }}
+      RULES_SWIFT_VERSION: 1.15.1
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+      - name: Clone SwiftSyntax
+        run: |
+          gh repo clone apple/swift-syntax -- \
+            --depth 1 \
+            --branch ${{ github.event.inputs.tag }} \
+            --single-branch
+      - name: Build & Publish SwiftSyntax prebuilt binary
+        run: |
+          cd swift-syntax
+
+          # Collect the list of files that are used to build SwiftSyntax.
+          outputs=$(bazel cquery ${{ env.BUILD_TARGET }} --output=files)
+
+          # Build SwiftSyntax.
+          bazel build ${{ env.BUILD_TARGET }}
+
+          # Copy the outputs to the archive directory.
+          mkdir -p ${{ env.ARCHIVE_NAME }}
+          for output in $outputs; do
+            cp -R $output ${{ env.ARCHIVE_NAME }}
+          done
+
+          # Create the BUILD file which will be used to include SwiftSyntax as a dependency.
+          cat > ${{ env.ARCHIVE_NAME }}/BUILD.bazel <<EOF
+          load("@build_bazel_rules_swift//swift:swift.bzl", "swift_import")
+
+          swift_import(
+              name = "SwiftSyntax_opt",
+              archives = ["libSwiftSyntax.a"],
+              module_name = "SwiftSyntax",
+              swiftdoc = "SwiftSyntax.swiftdoc",
+              swiftmodule = "SwiftSyntax.swiftmodule",
+              visibility = ["//visibility:public"],
+          )
+          EOF
+
+          # Create the MODULE.bazel file which will be used to include SwiftSyntax as a bazel_dep via archive_override.
+          cat > ${{ env.ARCHIVE_NAME }}/MODULE.bazel <<EOF
+          module(
+              name = "swift-syntax",
+              version = "${{ github.event.inputs.tag }}",
+              compatibility_level = 1,
+          )
+
+          bazel_dep(
+              name = "rules_swift",
+              version = "${{ env.RULES_SWIFT_VERSION }}",
+              repo_name = "build_bazel_rules_swift",
+          )
+          EOF
+
+          # Package the outputs into a tarball.
+          tar -czf ${{ env.ARCHIVE_NAME }}.tar.gz ${{ env.ARCHIVE_NAME }}
+
+          # Move the tarball to the repo.
+          # NOTE: this is required so gh can release based on this repository and not the swift-syntax repository.
+          mv ${{ env.ARCHIVE_NAME }}.tar.gz ../
+          cd ../
+
+          # Publish the tarball to GitHub Releases.
+          gh release create ${{ github.event.inputs.tag }} \
+            --title ${{ github.event.inputs.tag }} \
+            --notes "SwiftSyntax ${{ github.event.inputs.tag }} as a prebuilt binary" \
+            ${{ env.ARCHIVE_NAME }}.tar.gz
