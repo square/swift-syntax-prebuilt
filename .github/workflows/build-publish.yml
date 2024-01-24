@@ -7,18 +7,36 @@ on:
         description: 'The apple/swift-syntax version to build and publish as a prebuilt binary'
         required: true
         type: string
+      build_number:
+        description: 'An optional build number to suffix the release tag with (e.g. "3" -> "1.0.0+3")'
+        required: false
+        type: string
+      xcode_version:
+        description: 'The Xcode version to use for building'
+        required: true
+        default: '15.1'
+        type: string
+      macos_version:
+        description: 'The minimum macOS version to support'
+        required: true
+        default: '13.0'
+        type: string
+      rules_swift_version:
+        description: 'The version of rules_swift to use'
+        required: true
+        default: '1.5.1'
+        type: string
+
 
 jobs:
   build-publish:
     runs-on: macos-13
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      ARCHIVE_NAME: swift-syntax-${{ github.event.inputs.tag }}
-      XCODE_VERSION: 15.1
+      XCODE_VERSION: ${{ github.event.inputs.xcode_version }}
       SUPPORTED_ARCHS: ("x86_64" "arm64")
-      RULES_SWIFT_VERSION: 1.5.1
-      RULES_APPLE_VERSION: 2.0.0
-      MACOS_VERSION: 13.0
+      RULES_SWIFT_VERSION: ${{ github.event.inputs.rules_swift_version }}
+      MACOS_VERSION: ${{ github.event.inputs.macos_version }}
     steps:
       - name: Install brew dependencies
         run: |
@@ -37,12 +55,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          release_tag="${{ github.event.inputs.tag }}"
+          if [ -n "${{ github.event.inputs.build_number }}" ]; then
+            release_tag="${{ github.event.inputs.tag }}+${{ github.event.inputs.build_number }}"
+          fi
+
+          archive_name="swift-syntax-$release_tag"
           archs=${{ env.SUPPORTED_ARCHS }}
 
-          mkdir -p ${{ env.ARCHIVE_NAME }}
+          mkdir -p "$archive_name"
 
           # Create the MODULE.bazel file which will be used to include SwiftSyntax as a bazel_dep via archive_override.
-          cat > ${{ env.ARCHIVE_NAME }}/MODULE.bazel <<EOF
+          cat > "$archive_name/MODULE.bazel" <<EOF
           module(
               name = "swift-syntax",
               version = "${{ github.event.inputs.tag }}",
@@ -62,7 +86,7 @@ jobs:
           EOF
 
           # Create the BUILD file which will be used to include the exposed targets.
-          cat > ${{ env.ARCHIVE_NAME }}/BUILD.bazel <<EOF
+          cat > "$archive_name/BUILD.bazel" <<EOF
           load("@build_bazel_rules_swift//swift:swift.bzl", "swift_import")
 
           config_setting(
@@ -114,7 +138,7 @@ jobs:
 
             # Create the `swift_import` target for this module.
             # Do this in the directory to make it easier to use buildozer with labels.
-            pushd ../${{ env.ARCHIVE_NAME }}
+            pushd "../$archive_name"
             buildozer "new swift_import ${module_name}_opt" //:__pkg__
             buildozer "set module_name \"${module_name}\"" //:${module_name}_opt
             buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt
@@ -140,7 +164,7 @@ jobs:
             for output in $outputs; do
               if [[ $output == *.swiftmodule || $output == *.a || $output == *.swiftdoc ]]; then
                 output_name=$(basename "$output")
-                archive_dir_path="../${{ env.ARCHIVE_NAME }}/${arch}"
+                archive_dir_path="../${archive_name}/${arch}"
                 mkdir -p "$archive_dir_path"
                 archive_path="$archive_dir_path/${output_name}"
                 echo "Copying $output to $archive_path"
@@ -153,16 +177,26 @@ jobs:
           # -- end swift-syntax build --
 
           # Package the outputs into a tarball.
-          tar -czf ${{ env.ARCHIVE_NAME }}.tar.gz ${{ env.ARCHIVE_NAME }}
+          tar -czf "${archive_name}.tar.gz" "$archive_name"
 
           # Generate the expected sha256 checksum for the tarball.
-          bzlmod_sha256=$(openssl dgst -sha256 -binary ${{ env.ARCHIVE_NAME }}.tar.gz | openssl base64 -A | sed 's/^/sha256-/')
+          bzlmod_sha256=$(openssl dgst -sha256 -binary "${archive_name}.tar.gz" | openssl base64 -A | sed 's/^/sha256-/')
 
           # Make the release notes
           cat > release-notes.md <<EOF
           # SwiftSyntax ${{ github.event.inputs.tag }}
 
-          This release contains the pre-built binaries for SwiftSyntax ${{ github.event.inputs.tag }}.
+          This release contains the pre-built binaries for SwiftSyntax \`${{ github.event.inputs.tag }}\`.
+
+          Built with:
+            - Xcode \`${{ env.XCODE_VERSION }}\`
+            - macOS \`${{ env.MACOS_VERSION }}\`
+
+          Supported architectures:
+            - \`${archs[@]}\`.
+
+          Dependencies:
+            - [rules_swift](https://github.com/bazelbuild/rules_swift) \`${{ env.RULES_SWIFT_VERSION }}\`
 
           Use in your \`MODULE.bazel\` file with \`archive_override\`:
 
@@ -170,14 +204,14 @@ jobs:
             archive_override(
                 module_name = "swift-syntax",
                 integrity = "$bzlmod_sha256",
-                strip_prefix = "swift-syntax-${{ github.event.inputs.tag }}",
-                urls = ["https://github.com/square/swift-syntax-prebuilt/releases/download/${{ github.event.inputs.tag }}/swift-syntax-${{ github.event.inputs.tag }}.tar.gz"],
+                strip_prefix = "swift-syntax-$release_tag",
+                urls = ["https://github.com/square/swift-syntax-prebuilt/releases/download/$release_tag/swift-syntax-$release_tag.tar.gz"],
             )
             \`\`\`
           EOF
 
           # Publish the tarball to GitHub Releases.
-          gh release create ${{ github.event.inputs.tag }} \
-            --title ${{ github.event.inputs.tag }} \
+          gh release create "$release_tag" \
+            --title "swift-syntax-prebuilt version $release_tag" \
             --notes-file release-notes.md \
-            ${{ env.ARCHIVE_NAME }}.tar.gz
+            "${archive_name}.tar.gz"
