@@ -122,6 +122,7 @@ jobs:
             --macos_minimum_os="${{ env.MACOS_VERSION }}"
             --host_macos_minimum_os="${{ env.MACOS_VERSION }}"
             --features="swift.enable_library_evolution"
+            --feature="swift.emit_swiftinterface"
           )
 
           # Collect the labels for the targets that will be exported.
@@ -143,8 +144,8 @@ jobs:
             buildozer "set module_name \"${module_name}\"" //:${module_name}_opt
             buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt
             buildozer "set_select archives :darwin_x86_64 \"x86_64/lib${module_name}.a\" :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt
-            buildozer "set_select swiftmodule :darwin_x86_64 \"x86_64/${module_name}.swiftmodule\" :darwin_arm64 \"arm64/${module_name}.swiftmodule\"" //:${module_name}_opt
             buildozer "set_select swiftdoc :darwin_x86_64 \"x86_64/${module_name}.swiftdoc\" :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt
+            buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name}_opt
             if [ -n "$dependencies" ]; then
               # Add '_opt' to each word in the dependencies list and set the deps.
               dependencies=($(echo $dependencies | sed 's/ /_opt /g')_opt)
@@ -160,9 +161,9 @@ jobs:
             outputs=$(bazel cquery "set(${labels[@]})" --output=files "${build_flags[@]}" "${arch_flags[@]}")
             bazel build "${labels[@]}" "${build_flags[@]}" "${arch_flags[@]}"
 
-            # Copy the .swiftmodule, .a, .swiftdoc file to the archive directory within a subdirectory for the architecture.
+            # Copy the .swiftinterface, .a, .swiftdoc file to the archive directory within a subdirectory for the architecture.
             for output in $outputs; do
-              if [[ $output == *.swiftmodule || $output == *.a || $output == *.swiftdoc ]]; then
+              if [[ $output == *.swiftinterface || $output == *.a || $output == *.swiftdoc ]]; then
                 output_name=$(basename "$output")
                 archive_dir_path="../${archive_name}/${arch}"
                 mkdir -p "$archive_dir_path"
@@ -184,7 +185,7 @@ jobs:
 
           # Make the release notes
           cat > release-notes.md <<EOF
-          # SwiftSyntax ${{ github.event.inputs.tag }}
+          # SwiftSyntax Prebuilt $release_tag
 
           This release contains the pre-built binaries for SwiftSyntax \`${{ github.event.inputs.tag }}\`.
 
