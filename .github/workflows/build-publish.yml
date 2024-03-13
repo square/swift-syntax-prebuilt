@@ -22,11 +22,16 @@ on:
         default: '13.0'
         type: string
       rules_swift_version:
-        description: 'The version of rules_swift to use'
+        description: 'The version of rules_swift to use for the release archive MODULE'
         required: true
         default: '1.5.1'
         type: string
-
+      # TODO: default to override for now until https://github.com/bazelbuild/rules_swift/pull/1176 is released and used in swift-syntax.
+      swift_syntax_rules_swift_version:
+        description: 'The version of rules_swift to use for the swift-syntax MODULE when building'
+        required: false
+        default: '477df3a4576e5594a86f27b96950c17f9fab3cea'
+        type: string
 
 jobs:
   build-publish:
@@ -34,9 +39,9 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       XCODE_VERSION: ${{ github.event.inputs.xcode_version }}
-      SUPPORTED_ARCHS: ("x86_64" "arm64")
       RULES_SWIFT_VERSION: ${{ github.event.inputs.rules_swift_version }}
       MACOS_VERSION: ${{ github.event.inputs.macos_version }}
+      SWIFT_SYNTAX_RULES_SWIFT_VERSION: ${{ github.event.inputs.swift_syntax_rules_swift_version }}
     steps:
       - name: Install brew dependencies
         run: |
@@ -55,133 +60,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          release_tag="${{ github.event.inputs.tag }}"
-          if [ -n "${{ github.event.inputs.build_number }}" ]; then
-            release_tag="${{ github.event.inputs.tag }}+${{ github.event.inputs.build_number }}"
-          fi
-
-          archive_name="swift-syntax-$release_tag"
-          archs=${{ env.SUPPORTED_ARCHS }}
-
-          mkdir -p "$archive_name"
-
-          # Create the MODULE.bazel file which will be used to include SwiftSyntax as a bazel_dep via archive_override.
-          cat > "$archive_name/MODULE.bazel" <<EOF
-          module(
-              name = "swift-syntax",
-              version = "${{ github.event.inputs.tag }}",
-              compatibility_level = 1,
+          # Run the build and create the archive
+          bzlmod_sha256=$(
+            SWIFT_SYNTAX_VERSION=${{ github.event.inputs.tag }} \
+            RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
+            MACOS_VERSION=${{ env.MACOS_VERSION }} \
+            BUILD_NUMBER=${{ github.event.inputs.build_number }} \
+            SWIFT_SYNTAX_RULES_SWIFT_VERSION=${{ env.SWIFT_SYNTAX_RULES_SWIFT_VERSION }} \
+            ./build.sh
           )
-
-          bazel_dep(
-            name = "platforms",
-            version = "0.0.8",
-          )
-
-          bazel_dep(
-            name = "rules_swift",
-            version = "${{ env.RULES_SWIFT_VERSION }}",
-            repo_name = "build_bazel_rules_swift",
-          )
-          EOF
-
-          # Create the BUILD file which will be used to include the exposed targets.
-          cat > "$archive_name/BUILD.bazel" <<EOF
-          load("@build_bazel_rules_swift//swift:swift.bzl", "swift_import")
-
-          config_setting(
-              name = "darwin_x86_64",
-              constraint_values = [
-                  "@platforms//os:macos",
-                  "@platforms//cpu:x86_64",
-              ],
-          )
-
-          config_setting(
-              name = "darwin_arm64",
-              constraint_values = [
-                  "@platforms//os:macos",
-                  "@platforms//cpu:aarch64",
-              ],
-          )
-
-          EOF
-
-          # -- start swift-syntax build --
-          pushd swift-syntax
-
-          # TODO: for swift-syntax 508-509 there is a missing dep on `SwiftOperators` which causes build to fail.
-          # Use buildozer to add the missing dep.
-          buildozer "add deps :SwiftOperators" //:SwiftSyntaxMacros
-
-          # Shared build flags:
-          #  - set the minimum macOS version to the version specified in the workflow input
-          #  - set the host macOS version to the version specified in the workflow input
-          #  - enable library evolution
-          build_flags=(
-            --macos_minimum_os="${{ env.MACOS_VERSION }}"
-            --host_macos_minimum_os="${{ env.MACOS_VERSION }}"
-            --features="swift.enable_library_evolution"
-            --features="swift.emit_swiftinterface"
-          )
-
-          # Collect the labels for the targets that will be exported.
-          # Targets exported are those suffixed with `_opt`.
-          # The cquery output looks like: `//:SwiftBasicFormat_opt (5d78ae7)` and we take just the label.
-          labels=($(bazel cquery "filter(_opt, //...)" "${build_flags[@]}" | sed 's/ (.*//'))
-
-          # Create the BUILD file for each of the swift-syntax targets.
-          for label in ${labels[@]}; do
-            # Collect information about the target, we need deps to be propagated to downstream targets.
-            non_opt_label=$(echo $label | sed 's/_opt$//')
-            module_name=$(buildozer "print name" $non_opt_label)
-            dependencies=$(buildozer "print deps" $non_opt_label | sed 's/^\[//' | sed 's/\]$//')
-
-            # Create the `swift_import` target for this module.
-            # Do this in the directory to make it easier to use buildozer with labels.
-            pushd "../$archive_name"
-            buildozer "new swift_import ${module_name}_opt" //:__pkg__
-            buildozer "set module_name \"${module_name}\"" //:${module_name}_opt
-            buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt
-            buildozer "set_select archives :darwin_x86_64 \"x86_64/lib${module_name}.a\" :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt
-            buildozer "set_select swiftdoc :darwin_x86_64 \"x86_64/${module_name}.swiftdoc\" :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt
-            buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name}_opt
-            if [ -n "$dependencies" ]; then
-              # Add '_opt' to each word in the dependencies list and set the deps.
-              dependencies=($(echo $dependencies | sed 's/ /_opt /g')_opt)
-              buildozer "set deps ${dependencies[*]}" //:${module_name}_opt
-            fi
-            popd
-          done
-
-          # Build the module for each architecture we suppport.
-          for arch in ${archs[@]}; do
-            echo "Building ${labels[@]} for: $arch"
-            arch_flags=("--cpu=darwin_${arch}")
-            outputs=$(bazel cquery "set(${labels[@]})" --output=files "${build_flags[@]}" "${arch_flags[@]}")
-            bazel build "${labels[@]}" "${build_flags[@]}" "${arch_flags[@]}"
-
-            # Copy the .swiftinterface, .a, .swiftdoc file to the archive directory within a subdirectory for the architecture.
-            for output in $outputs; do
-              if [[ $output == *.swiftinterface || $output == *.a || $output == *.swiftdoc ]]; then
-                output_name=$(basename "$output")
-                archive_dir_path="../${archive_name}/${arch}"
-                mkdir -p "$archive_dir_path"
-                archive_path="$archive_dir_path/${output_name}"
-                echo "Copying $output to $archive_path"
-                cp -R "$output" "$archive_path"
-              fi
-            done
-          done
-
-          popd
-          # -- end swift-syntax build --
-
-          # Package the outputs into a tarball.
-          tar -czf "${archive_name}.tar.gz" "$archive_name"
-
-          # Generate the expected sha256 checksum for the tarball.
-          bzlmod_sha256=$(openssl dgst -sha256 -binary "${archive_name}.tar.gz" | openssl base64 -A | sed 's/^/sha256-/')
 
           # Make the release notes
           cat > release-notes.md <<EOF
