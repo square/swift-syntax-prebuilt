@@ -60,9 +60,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          release_tag="$SWIFT_SYNTAX_VERSION"
-          if [ -n "${BUILD_NUMBER:-}" ]; then
-            release_tag="$release_tag+$BUILD_NUMBER"
+          release_tag="${{ github.event.inputs.tag }}"
+          if [ -n "${{ github.event.inputs.build_number }}" ]; then
+            release_tag="$release_tag+${{ github.event.inputs.build_number }}"
           fi
 
           # Run the build and create the archive
