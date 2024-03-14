@@ -93,6 +93,7 @@ build_flags=(
   --macos_minimum_os="$MACOS_VERSION"
   --host_macos_minimum_os="$MACOS_VERSION"
   --features="swift.enable_library_evolution"
+  --features="swift.emit_swiftinterface"
   --features="swift.emit_private_swiftinterface"
 )
 
@@ -111,16 +112,24 @@ for label in ${labels[@]}; do
   # Create the `swift_import` target for this module.
   # Do this in the directory to make it easier to use buildozer with labels.
   pushd "../$archive_name"
-  buildozer "new swift_import ${module_name}_opt" //:__pkg__
-  buildozer "set module_name \"${module_name}\"" //:${module_name}_opt
-  buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt
-  buildozer "set_select archives :darwin_x86_64 \"x86_64/lib${module_name}.a\" :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt
-  buildozer "set_select swiftdoc :darwin_x86_64 \"x86_64/${module_name}.swiftdoc\" :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt
-  buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.private.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.private.swiftinterface\"" //:${module_name}_opt
+  buildozer "new swift_import ${module_name}_opt" //:__pkg__ >/dev/null
+  buildozer "set module_name \"${module_name}\"" //:${module_name}_opt >/dev/null
+  buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt >/dev/null
+  buildozer "set_select archives :darwin_x86_64 \"x86_64/lib${module_name}.a\" :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt >/dev/null
+  buildozer "set_select swiftdoc :darwin_x86_64 \"x86_64/${module_name}.swiftdoc\" :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt >/dev/null
+
+  # Use the .private.swiftinterface file as the swiftinterface for the `SwiftSyntax` target.
+  # This allows SwiftLint to use `@_spi`.
+  if [ "$module_name" == "SwiftSyntax" ]; then
+    buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.private.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.private.swiftinterface\"" //:${module_name}_opt >/dev/null
+  else
+    buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name}_opt >/dev/null
+  fi
+
+  # Add '_opt' to each word in the dependencies list and set the deps.
   if [ -n "$dependencies" ]; then
-    # Add '_opt' to each word in the dependencies list and set the deps.
     dependencies=($(echo $dependencies | sed 's/ /_opt /g')_opt)
-    buildozer "set deps ${dependencies[*]}" //:${module_name}_opt
+    buildozer "set deps ${dependencies[*]}" //:${module_name}_opt >/dev/null
   fi
   popd
 done
@@ -129,11 +138,11 @@ done
 for arch in ${archs[@]}; do
   arch_flags=("--cpu=darwin_${arch}")
   outputs=$(bazel cquery "set(${labels[@]})" --output=files "${build_flags[@]}" "${arch_flags[@]}")
-  bazel build "${labels[@]}" "${build_flags[@]}" "${arch_flags[@]}"
+  bazel build "${labels[@]}" "${build_flags[@]}" "${arch_flags[@]}" >/dev/null
 
-  # Copy the .private.swiftinterface, .a, .swiftdoc file to the archive directory within a subdirectory for the architecture.
+  # Copy the build product files to the archive directory within a subdirectory for the architecture.
   for output in $outputs; do
-    if [[ $output == *.private.swiftinterface || $output == *.a || $output == *.swiftdoc ]]; then
+    if [[ $output == *.swiftinterface || $output == *.private.swiftinterface || $output == *.a || $output == *.swiftdoc ]]; then
       output_name=$(basename "$output")
       archive_dir_path="../${archive_name}/${arch}"
       mkdir -p "$archive_dir_path"
