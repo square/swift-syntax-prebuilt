@@ -1,0 +1,51 @@
+name: Build and Publish
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  dry-run:
+    runs-on: macos-13
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SWIFT_SYNTAX_VERSION: 509.1.1
+      XCODE_VERSION: 15.1
+      RULES_SWIFT_VERSION: 1.5.1
+      MACOS_VERSION: 13.0
+      # TODO: default to override for now until https://github.com/bazelbuild/rules_swift/pull/1176 is released and used in swift-syntax.
+      SWIFT_SYNTAX_RULES_SWIFT_VERSION: 477df3a4576e5594a86f27b96950c17f9fab3cea
+    steps:
+      - name: Install brew dependencies
+        run: |
+          brew install buildozer
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+      - name: Clone repo
+        uses: actions/checkout@v4
+      - name: Clone SwiftSyntax
+        run: |
+          gh repo clone apple/swift-syntax -- \
+            --depth 1 \
+            --branch ${{ env.SWIFT_SYNTAX_VERSION }} \
+            --single-branch
+      - name: Build & Publish SwiftSyntax prebuilt binary
+        run: |
+          set -euo pipefail
+
+          # Run the build and create the archive
+          bzlmod_sha256=$(
+            SWIFT_SYNTAX_VERSION=${{ env.SWIFT_SYNTAX_VERSION }} \
+            RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
+            MACOS_VERSION=${{ env.MACOS_VERSION }} \
+            SWIFT_SYNTAX_RULES_SWIFT_VERSION=${{ env.SWIFT_SYNTAX_RULES_SWIFT_VERSION }} \
+            ./build.sh
+          )
+      - name: Upload SwiftSyntax prebuilt binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-syntax
+          path: swift-syntax-${{ env.SWIFT_SYNTAX_VERSION }}.tar.gz
+          if-no-files-found: error
+
