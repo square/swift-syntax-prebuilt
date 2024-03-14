@@ -60,6 +60,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          release_tag="$SWIFT_SYNTAX_VERSION"
+          if [ -n "${BUILD_NUMBER:-}" ]; then
+            release_tag="$release_tag+$BUILD_NUMBER"
+          fi
+
           # Run the build and create the archive
           bzlmod_sha256=$(
             SWIFT_SYNTAX_VERSION=${{ github.event.inputs.tag }} \
