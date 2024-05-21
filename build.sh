@@ -159,7 +159,7 @@ popd
 tar -czf "${archive_name}.tar.gz" "$archive_name"
 
 # Generate the expected sha256 checksum for the tarball.
-bzlmod_sha256=$(openssl dgst -sha256 -binary "${archive_name}.tar.gz" | openssl base64 -A | sed 's/^/sha256-/')
+openssl dgst -sha256 -binary "${archive_name}.tar.gz" | openssl base64 -A | sed 's/^/sha256-/' >"${archive_name}.tar.gz.sha256"
+sha256_checksum=$(cat "${archive_name}.tar.gz.sha256")
 
-# Output the sha256 checksum so scripts can use it.
-echo "$bzlmod_sha256"
+echo "Dry-run completed successfully, SHA256 checksum for the archive is: $sha256_checksum"
