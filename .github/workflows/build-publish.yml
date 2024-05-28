@@ -74,7 +74,7 @@ jobs:
           BUILD_NUMBER=${{ github.event.inputs.build_number }} \
           SWIFT_SYNTAX_RULES_SWIFT_VERSION=${{ env.SWIFT_SYNTAX_RULES_SWIFT_VERSION }} \
             ./build.sh
-          bzlmob_sha256=$(cat "${archive_name}.tar.gz.sha256")
+          bzlmod_sha256=$(cat "${archive_name}.tar.gz.sha256")
 
           # Make the release notes
           cat > release-notes.md <<EOF
