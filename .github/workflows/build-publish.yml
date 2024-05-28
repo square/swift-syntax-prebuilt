@@ -66,7 +66,6 @@ jobs:
           fi
 
           archive_name="swift-syntax-$release_tag"
-          archs=("x86_64" "arm64")
 
           # Run the build and create the archive
           SWIFT_SYNTAX_VERSION=${{ github.event.inputs.tag }} \
@@ -86,6 +85,9 @@ jobs:
           Built with:
             - Xcode \`${{ env.XCODE_VERSION }}\`
             - macOS \`${{ env.MACOS_VERSION }}\`
+
+          Supported architectures:
+            - arm64
 
           Dependencies:
             - [rules_swift](https://github.com/bazelbuild/rules_swift) \`${{ env.RULES_SWIFT_VERSION }}\`
