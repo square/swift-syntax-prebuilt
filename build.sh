@@ -20,7 +20,7 @@ if [ -n "${BUILD_NUMBER:-}" ]; then
 fi
 
 archive_name="swift-syntax-$release_tag"
-archs=("x86_64" "arm64")
+archs=("arm64")
 
 mkdir -p "$archive_name"
 
@@ -115,15 +115,15 @@ for label in ${labels[@]}; do
   buildozer "new swift_import ${module_name}_opt" //:__pkg__ >/dev/null
   buildozer "set module_name \"${module_name}\"" //:${module_name}_opt >/dev/null
   buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt >/dev/null
-  buildozer "set_select archives :darwin_x86_64 \"x86_64/lib${module_name}.a\" :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt >/dev/null
-  buildozer "set_select swiftdoc :darwin_x86_64 \"x86_64/${module_name}.swiftdoc\" :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt >/dev/null
+  buildozer "set_select archives :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt >/dev/null
+  buildozer "set_select swiftdoc :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt >/dev/null
 
   # Use the .private.swiftinterface file as the swiftinterface for the `SwiftSyntax` target.
   # This allows SwiftLint to use `@_spi`.
   if [ "$module_name" == "SwiftSyntax" ]; then
-    buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.private.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.private.swiftinterface\"" //:${module_name}_opt >/dev/null
+    buildozer "set_select swiftinterface :darwin_arm64 \"arm64/${module_name}.private.swiftinterface\"" //:${module_name}_opt >/dev/null
   else
-    buildozer "set_select swiftinterface :darwin_x86_64 \"x86_64/${module_name}.swiftinterface\" :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name}_opt >/dev/null
+    buildozer "set_select swiftinterface :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name}_opt >/dev/null
   fi
 
   # Add '_opt' to each word in the dependencies list and set the deps.
