@@ -12,7 +12,6 @@ set -euo pipefail
 #
 # Optional environment variables:
 #   - BUILD_NUMBER: The build number to append to the release tag.
-#   - SWIFT_SYNTAX_RULES_SWIFT_VERSION: The version of rules_swift to use for building within the swift-syntax repository
 
 release_tag="$SWIFT_SYNTAX_VERSION"
 if [ -n "${BUILD_NUMBER:-}" ]; then
@@ -40,6 +39,7 @@ bazel_dep(
 bazel_dep(
     name = "rules_swift",
     version = "$RULES_SWIFT_VERSION",
+    max_compatibility_level = 2,
     repo_name = "build_bazel_rules_swift",
 )
 EOF
@@ -68,22 +68,6 @@ EOF
 
 # -- start swift-syntax build --
 pushd swift-syntax
-
-# TODO: for swift-syntax 508-509 there is a missing dep on `SwiftOperators` which causes build to fail.
-# Use buildozer to add the missing dep.
-buildozer "add deps :SwiftOperators" //:SwiftSyntaxMacros
-
-# Override the rules_swift version if it is set.
-if [ -n "${SWIFT_SYNTAX_RULES_SWIFT_VERSION:-}" ]; then
-  cat >>"MODULE.bazel" <<EOF
-git_override(
-    module_name = "rules_swift",
-    commit = "$SWIFT_SYNTAX_RULES_SWIFT_VERSION",
-    remote = "https://github.com/bazelbuild/rules_swift.git",
-)
-
-EOF
-fi
 
 # Shared build flags:
 #  - set the minimum macOS version to the version specified in the workflow input
