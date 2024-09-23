@@ -10,12 +10,10 @@ jobs:
     runs-on: macos-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SWIFT_SYNTAX_VERSION: 510.0.2
-      XCODE_VERSION: 15.4
-      RULES_SWIFT_VERSION: 1.5.1
+      SWIFT_SYNTAX_VERSION: 600.0.0
+      XCODE_VERSION: 16.0
+      RULES_SWIFT_VERSION: 2.1.1
       MACOS_VERSION: 13.0
-      # TODO: default to override for now until https://github.com/bazelbuild/rules_swift/pull/1176 is released and used in swift-syntax.
-      SWIFT_SYNTAX_RULES_SWIFT_VERSION: 477df3a4576e5594a86f27b96950c17f9fab3cea
     steps:
       - name: Install brew dependencies
         run: |
@@ -38,8 +36,7 @@ jobs:
           SWIFT_SYNTAX_VERSION=${{ env.SWIFT_SYNTAX_VERSION }} \
           RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
           MACOS_VERSION=${{ env.MACOS_VERSION }} \
-          SWIFT_SYNTAX_RULES_SWIFT_VERSION=${{ env.SWIFT_SYNTAX_RULES_SWIFT_VERSION }} \
-            ./build.sh
+          ./build.sh
       - name: Upload SwiftSyntax prebuilt binary
         uses: actions/upload-artifact@v4
         with:

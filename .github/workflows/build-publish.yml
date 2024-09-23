@@ -14,7 +14,7 @@ on:
       xcode_version:
         description: 'The Xcode version to use for building'
         required: true
-        default: '15.4'
+        default: '16.0'
         type: string
       macos_version:
         description: 'The minimum macOS version to support'
@@ -24,13 +24,7 @@ on:
       rules_swift_version:
         description: 'The version of rules_swift to use for the release archive MODULE'
         required: true
-        default: '1.5.1'
-        type: string
-      # TODO: default to override for now until https://github.com/bazelbuild/rules_swift/pull/1176 is released and used in swift-syntax.
-      swift_syntax_rules_swift_version:
-        description: 'The version of rules_swift to use for the swift-syntax MODULE when building'
-        required: false
-        default: '477df3a4576e5594a86f27b96950c17f9fab3cea'
+        default: '2.1.1'
         type: string
 
 jobs:
@@ -41,7 +35,6 @@ jobs:
       XCODE_VERSION: ${{ github.event.inputs.xcode_version }}
       RULES_SWIFT_VERSION: ${{ github.event.inputs.rules_swift_version }}
       MACOS_VERSION: ${{ github.event.inputs.macos_version }}
-      SWIFT_SYNTAX_RULES_SWIFT_VERSION: ${{ github.event.inputs.swift_syntax_rules_swift_version }}
     steps:
       - name: Install brew dependencies
         run: |
@@ -72,8 +65,7 @@ jobs:
           RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
           MACOS_VERSION=${{ env.MACOS_VERSION }} \
           BUILD_NUMBER=${{ github.event.inputs.build_number }} \
-          SWIFT_SYNTAX_RULES_SWIFT_VERSION=${{ env.SWIFT_SYNTAX_RULES_SWIFT_VERSION }} \
-            ./build.sh
+          ./build.sh
           bzlmod_sha256=$(cat "${archive_name}.tar.gz.sha256")
 
           # Make the release notes
