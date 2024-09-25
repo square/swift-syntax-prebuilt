@@ -86,12 +86,19 @@ build_flags=(
 # The cquery output looks like: `//:SwiftBasicFormat_opt (5d78ae7)` and we take just the label.
 labels=($(bazel cquery "filter(_opt, //...)" "${build_flags[@]}" | sed 's/ (.*//'))
 
+# Shims are included as cc_libraries but don't need to be exposed when already built, so filter those out
+# The cquery output looks like: `//:_SwiftSyntaxCShims (7a8c846)` so we take the label and remove its `//` prefix
+ignore_deps=($(bazel cquery "kind(cc_library, //...)" "${build_flags[@]}" | sed 's/ (.*//' | sed 's/\/\///' | uniq))
+
 # Create the BUILD file for each of the swift-syntax targets.
 for label in ${labels[@]}; do
   # Collect information about the target, we need deps to be propagated to downstream targets.
   non_opt_label=$(echo $label | sed 's/_opt$//')
   module_name=$(buildozer "print name" $non_opt_label)
   dependencies=$(buildozer "print deps" $non_opt_label | sed 's/^\[//' | sed 's/\]$//')
+    
+  # remove ignore_deps from the query results
+  for item in "${ignore_deps[@]}"; { dependencies=${dependencies//$item/}; }
 
   # Create the `swift_import` target for this module.
   # Do this in the directory to make it easier to use buildozer with labels.
