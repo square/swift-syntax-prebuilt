@@ -9,6 +9,7 @@ set -euo pipefail
 #   - SWIFT_SYNTAX_VERSION: The version of SwiftSyntax to build.
 #   - RULES_SWIFT_VERSION: The version of rules_swift to use for the archive MODULE.bazel file.
 #   - MACOS_VERSION: The minimum macOS version to target.
+#   - SWIFT_VERSION: The Swift language version to use when building the release archive.
 #
 # Optional environment variables:
 #   - BUILD_NUMBER: The build number to append to the release tag.
@@ -79,6 +80,8 @@ build_flags=(
   --features="swift.enable_library_evolution"
   --features="swift.emit_swiftinterface"
   --features="swift.emit_private_swiftinterface"
+  --@build_bazel_rules_swift//swift:copt="-swift-version"
+  --@build_bazel_rules_swift//swift:copt="$SWIFT_VERSION"
 )
 
 # Collect the labels for the targets that will be exported.
@@ -96,7 +99,7 @@ for label in ${labels[@]}; do
   non_opt_label=$(echo $label | sed 's/_opt$//')
   module_name=$(buildozer "print name" $non_opt_label)
   dependencies=$(buildozer "print deps" $non_opt_label | sed 's/^\[//' | sed 's/\]$//')
-    
+
   # remove ignore_deps from the query results
   for item in "${ignore_deps[@]}"; { dependencies=${dependencies//$item/}; }
 

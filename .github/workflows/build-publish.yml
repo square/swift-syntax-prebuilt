@@ -26,6 +26,11 @@ on:
         required: true
         default: '2.1.1'
         type: string
+      swift_version:
+        description: 'The Swift language version to use when building the release archive'
+        required: true
+        default: '5'
+        type: string
 
 jobs:
   build-publish:
@@ -65,6 +70,7 @@ jobs:
           RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
           MACOS_VERSION=${{ env.MACOS_VERSION }} \
           BUILD_NUMBER=${{ github.event.inputs.build_number }} \
+          SWIFT_VERSION=${{ github.event.inputs.swift_version }} \
           ./build.sh
           bzlmod_sha256=$(cat "${archive_name}.tar.gz.sha256")
 

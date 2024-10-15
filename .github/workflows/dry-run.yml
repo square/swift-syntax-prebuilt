@@ -14,6 +14,7 @@ jobs:
       XCODE_VERSION: 16.0
       RULES_SWIFT_VERSION: 2.1.1
       MACOS_VERSION: 13.0
+      SWIFT_VERSION: 5
     steps:
       - name: Install brew dependencies
         run: |
@@ -36,6 +37,7 @@ jobs:
           SWIFT_SYNTAX_VERSION=${{ env.SWIFT_SYNTAX_VERSION }} \
           RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
           MACOS_VERSION=${{ env.MACOS_VERSION }} \
+          SWIFT_VERSION=${{ env.SWIFT_VERSION }} \
           ./build.sh
       - name: Upload SwiftSyntax prebuilt binary
         uses: actions/upload-artifact@v4
