@@ -103,25 +103,29 @@ for label in ${labels[@]}; do
   # Create the `swift_import` target for this module.
   # Do this in the directory to make it easier to use buildozer with labels.
   pushd "../$archive_name"
-  buildozer "new swift_import ${module_name}_opt" //:__pkg__ >/dev/null
-  buildozer "set module_name \"${module_name}\"" //:${module_name}_opt >/dev/null
-  buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt >/dev/null
-  buildozer "set_select archives :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name}_opt >/dev/null
-  buildozer "set_select swiftdoc :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name}_opt >/dev/null
+  buildozer "new swift_import ${module_name}" //:__pkg__ >/dev/null
+  buildozer "set module_name \"${module_name}\"" //:${module_name} >/dev/null
+  buildozer "set visibility \"//visibility:public\"" //:${module_name} >/dev/null
+  buildozer "set_select archives :darwin_arm64 \"arm64/lib${module_name}.a\"" //:${module_name} >/dev/null
+  buildozer "set_select swiftdoc :darwin_arm64 \"arm64/${module_name}.swiftdoc\"" //:${module_name} >/dev/null
 
   # Use the .private.swiftinterface file as the swiftinterface for the `SwiftSyntax` target.
   # This allows SwiftLint to use `@_spi`.
   if [ "$module_name" == "SwiftSyntax" ]; then
-    buildozer "set_select swiftinterface :darwin_arm64 \"arm64/${module_name}.private.swiftinterface\"" //:${module_name}_opt >/dev/null
+    buildozer "set_select swiftinterface :darwin_arm64 \"arm64/${module_name}.private.swiftinterface\"" //:${module_name} >/dev/null
   else
-    buildozer "set_select swiftinterface :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name}_opt >/dev/null
+    buildozer "set_select swiftinterface :darwin_arm64 \"arm64/${module_name}.swiftinterface\"" //:${module_name} >/dev/null
   fi
 
-  # Add '_opt' to each word in the dependencies list and set the deps.
   if [ -n "$dependencies" ]; then
-    dependencies=($(echo $dependencies | sed 's/ /_opt /g')_opt)
-    buildozer "set deps ${dependencies[*]}" //:${module_name}_opt >/dev/null
+    buildozer "set deps ${dependencies[*]}" //:${module_name} >/dev/null
   fi
+
+  # Create the alias `_opt` for the `swift_import` target that is used by some other modules.
+  # Since these are prebuilt in a release configuration, they are always in "opt" mode.
+  buildozer "new alias ${module_name}_opt" //:__pkg__ >/dev/null
+  buildozer "set actual :${module_name}" //:${module_name}_opt >/dev/null
+
   popd
 done
 
