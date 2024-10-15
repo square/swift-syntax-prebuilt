@@ -96,7 +96,7 @@ for label in ${labels[@]}; do
   non_opt_label=$(echo $label | sed 's/_opt$//')
   module_name=$(buildozer "print name" $non_opt_label)
   dependencies=$(buildozer "print deps" $non_opt_label | sed 's/^\[//' | sed 's/\]$//')
-    
+
   # remove ignore_deps from the query results
   for item in "${ignore_deps[@]}"; { dependencies=${dependencies//$item/}; }
 
@@ -125,6 +125,7 @@ for label in ${labels[@]}; do
   # Since these are prebuilt in a release configuration, they are always in "opt" mode.
   buildozer "new alias ${module_name}_opt" //:__pkg__ >/dev/null
   buildozer "set actual :${module_name}" //:${module_name}_opt >/dev/null
+  buildozer "set visibility \"//visibility:public\"" //:${module_name}_opt >/dev/null
 
   popd
 done
