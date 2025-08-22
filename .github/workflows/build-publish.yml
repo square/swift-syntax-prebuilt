@@ -14,7 +14,7 @@ on:
       xcode_version:
         description: 'The Xcode version to use for building'
         required: true
-        default: '16.0'
+        default: '16.4'
         type: string
       macos_version:
         description: 'The minimum macOS version to support'
@@ -24,7 +24,7 @@ on:
       rules_swift_version:
         description: 'The version of rules_swift to use for the release archive MODULE'
         required: true
-        default: '2.1.1'
+        default: '3.1.2'
         type: string
 
 jobs:
