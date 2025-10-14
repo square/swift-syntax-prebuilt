@@ -14,7 +14,7 @@ on:
       xcode_version:
         description: 'The Xcode version to use for building'
         required: true
-        default: '16.4'
+        default: '26.0.1'
         type: string
       macos_version:
         description: 'The minimum macOS version to support'
