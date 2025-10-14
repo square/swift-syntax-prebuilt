@@ -10,8 +10,8 @@ jobs:
     runs-on: macos-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SWIFT_SYNTAX_VERSION: 601.0.1
-      XCODE_VERSION: 16.4
+      SWIFT_SYNTAX_VERSION: 602.0.0
+      XCODE_VERSION: 26.0.1
       RULES_SWIFT_VERSION: 3.1.2
       MACOS_VERSION: 13.0
     steps:
