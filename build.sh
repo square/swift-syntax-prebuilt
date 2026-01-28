@@ -45,6 +45,11 @@ bazel_dep(
 )
 
 bazel_dep(
+    name = "rules_cc",
+    version = "0.2.14",
+)
+
+bazel_dep(
     name = "rules_swift",
     version = "$RULES_SWIFT_VERSION",
     max_compatibility_level = 3,
@@ -55,6 +60,7 @@ EOF
 # Create the BUILD file which will be used to include the exposed targets.
 cat >"$archive_name/BUILD.bazel" <<EOF
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_import")
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
 EOF
 
 # -- start swift-syntax build --
