@@ -78,21 +78,6 @@ bazel_dep(name = "rules_swift", version = "$RULES_SWIFT_VERSION", repo_name = "b
 bazel_dep(name = "rules_apple", version = "$RULES_APPLE_VERSION", repo_name = "build_bazel_rules_apple")
 EOF
 
-# TODO: remove this eventually
-# swift-syntax 601.0.x does not properly declare the version marker target
-# so we add it to the BUILD file manually.
-if [ "$SWIFT_SYNTAX_VERSION" == "601.0.1" ]; then
-  echo "NOTE: patching swift-syntax BUILD.bazel for version marker module in swift-syntax $SWIFT_SYNTAX_VERSION"
-  cat >>"BUILD.bazel" <<EOF
-swift_syntax_library(
-    name = "SwiftSyntax601",
-    srcs = glob(["Sources/VersionMarkerModules/SwiftSyntax601/**/*.swift"]),
-    deps = [
-    ],
-)
-EOF
-fi
-
 # Shared build flags:
 #  - set the minimum macOS version to the version specified in the workflow input
 #  - set the host macOS version to the version specified in the workflow input
