@@ -1,3 +1,10 @@
 .DS_Store
 swift-syntax
 swift-syntax-*
+
+# Per-platform build outputs from build.sh build (CI artifacts).
+staging/
+
+# Final release archive is produced by build.sh package and published from CI.
+swift-syntax-*.tar.gz
+swift-syntax-*.tar.gz.sha256

@@ -26,63 +26,139 @@ on:
         required: true
         default: '3.1.2'
         type: string
+      swift_version_linux:
+        description: 'The Swift toolchain version to install on the Linux runner'
+        required: true
+        default: '6.2'
+        type: string
+
+# Surface inputs as env vars so shell bodies can read them as `$VARS`
+# rather than `${{ ... }}` (Semgrep flags context-var expansion in `run:`).
+env:
+  RELEASE_TAG: ${{ inputs.tag }}${{ inputs.build_number != '' && format('+{0}', inputs.build_number) || '' }}
+  SWIFT_SYNTAX_VERSION: ${{ inputs.tag }}
+  BUILD_NUMBER: ${{ inputs.build_number }}
+  XCODE_VERSION: ${{ inputs.xcode_version }}
+  MACOS_VERSION: ${{ inputs.macos_version }}
+  RULES_SWIFT_VERSION: ${{ inputs.rules_swift_version }}
+  SWIFT_VERSION_LINUX: ${{ inputs.swift_version_linux }}
+
+# Read-only by default; publish job opts in to contents:write.
+permissions:
+  contents: read
 
 jobs:
-  build-publish:
+  build-macos-arm64:
     runs-on: macos-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      XCODE_VERSION: ${{ github.event.inputs.xcode_version }}
-      RULES_SWIFT_VERSION: ${{ github.event.inputs.rules_swift_version }}
-      MACOS_VERSION: ${{ github.event.inputs.macos_version }}
+      TARGET_PLATFORM: macos-arm64
     steps:
       - name: Install brew dependencies
-        run: |
-          brew install buildozer
+        run: brew install buildozer
       - name: Select Xcode ${{ env.XCODE_VERSION }}
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
       - name: Clone repo
         uses: actions/checkout@v4
       - name: Clone SwiftSyntax
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh repo clone apple/swift-syntax -- \
             --depth 1 \
-            --branch ${{ github.event.inputs.tag }} \
+            --branch "$SWIFT_SYNTAX_VERSION" \
             --single-branch
+      - name: Build SwiftSyntax for macos-arm64
+        run: ./build.sh build
+      - name: Upload per-platform staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-macos-arm64
+          path: staging/macos-arm64.tar.gz
+          if-no-files-found: error
+
+  build-linux-x86_64:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_PLATFORM: linux-x86_64
+      # rules_swift's Linux toolchain requires clang; ubuntu-latest defaults to gcc.
+      CC: clang
+      CXX: clang++
+    steps:
+      - name: Install Swift ${{ env.SWIFT_VERSION_LINUX }}
+        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
+        with:
+          swift-version: ${{ env.SWIFT_VERSION_LINUX }}
+      - name: Install clang + buildozer + jq
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang jq
+          curl -sSL -o /tmp/buildozer \
+            https://github.com/bazelbuild/buildtools/releases/latest/download/buildozer-linux-amd64
+          chmod +x /tmp/buildozer
+          sudo mv /tmp/buildozer /usr/local/bin/buildozer
+      - name: Clone repo
+        uses: actions/checkout@v4
+      - name: Clone SwiftSyntax
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh repo clone apple/swift-syntax -- \
+            --depth 1 \
+            --branch "$SWIFT_SYNTAX_VERSION" \
+            --single-branch
+      - name: Build SwiftSyntax for linux-x86_64
+        run: ./build.sh build
+      - name: Upload per-platform staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-linux-x86_64
+          path: staging/linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs:
+      - build-macos-arm64
+      - build-linux-x86_64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+      - name: Download per-platform staging artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: staging
+          pattern: staging-*
+          merge-multiple: true
+      - name: Package SwiftSyntax prebuilt archive
+        run: ./build.sh package
       - name: Build & Publish SwiftSyntax prebuilt binary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
-          release_tag="${{ github.event.inputs.tag }}"
-          if [ -n "${{ github.event.inputs.build_number }}" ]; then
-            release_tag="$release_tag+${{ github.event.inputs.build_number }}"
-          fi
-
-          archive_name="swift-syntax-$release_tag"
-
-          # Run the build and create the archive
-          SWIFT_SYNTAX_VERSION=${{ github.event.inputs.tag }} \
-          RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
-          MACOS_VERSION=${{ env.MACOS_VERSION }} \
-          BUILD_NUMBER=${{ github.event.inputs.build_number }} \
-          ./build.sh
+          archive_name="swift-syntax-${RELEASE_TAG}"
           bzlmod_sha256=$(cat "${archive_name}.tar.gz.sha256")
 
-          # Make the release notes
           cat > release-notes.md <<EOF
-          # SwiftSyntax Prebuilt $release_tag
+          # SwiftSyntax Prebuilt $RELEASE_TAG
 
-          This release contains the pre-built binaries for SwiftSyntax \`${{ github.event.inputs.tag }}\`.
+          This release contains the pre-built binaries for SwiftSyntax \`$SWIFT_SYNTAX_VERSION\`.
 
           Built with:
-            - Xcode \`${{ env.XCODE_VERSION }}\`
-            - macOS \`${{ env.MACOS_VERSION }}\`
+            - Xcode \`$XCODE_VERSION\` (macOS)
+            - macOS \`$MACOS_VERSION\`
+            - Swift \`$SWIFT_VERSION_LINUX\` (Linux)
 
-          Supported architectures:
-            - arm64
+          Supported platforms:
+            - macOS arm64
+            - Linux x86_64
 
           Dependencies:
-            - [rules_swift](https://github.com/bazelbuild/rules_swift) \`${{ env.RULES_SWIFT_VERSION }}\`
+            - [rules_swift](https://github.com/bazelbuild/rules_swift) \`$RULES_SWIFT_VERSION\`
 
           Use in your \`MODULE.bazel\` file with \`archive_override\`:
 
@@ -90,15 +166,14 @@ jobs:
             archive_override(
                 module_name = "swift-syntax",
                 integrity = "$bzlmod_sha256",
-                strip_prefix = "swift-syntax-$release_tag",
-                urls = ["https://github.com/square/swift-syntax-prebuilt/releases/download/$release_tag/swift-syntax-$release_tag.tar.gz"],
+                strip_prefix = "swift-syntax-$RELEASE_TAG",
+                urls = ["https://github.com/square/swift-syntax-prebuilt/releases/download/$RELEASE_TAG/swift-syntax-$RELEASE_TAG.tar.gz"],
             )
             \`\`\`
           EOF
 
-          # Publish the tarball to GitHub Releases.
-          gh release create "$release_tag" \
-            --title "swift-syntax-prebuilt version $release_tag" \
+          gh release create "$RELEASE_TAG" \
+            --title "swift-syntax-prebuilt version $RELEASE_TAG" \
             --notes-file release-notes.md \
             "${archive_name}.tar.gz" \
             "${archive_name}.tar.gz.sha256"
