@@ -5,39 +5,104 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+env:
+  SWIFT_SYNTAX_VERSION: 602.0.0
+  XCODE_VERSION: 26.3.0
+  RULES_SWIFT_VERSION: 3.1.2
+  MACOS_VERSION: 13.0
+  SWIFT_VERSION_LINUX: "6.2"
+
 jobs:
-  dry-run:
+  build-macos-arm64:
     runs-on: macos-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SWIFT_SYNTAX_VERSION: 602.0.0
-      XCODE_VERSION: 26.3.0
-      RULES_SWIFT_VERSION: 3.1.2
-      MACOS_VERSION: 13.0
+      TARGET_PLATFORM: macos-arm64
     steps:
       - name: Install brew dependencies
-        run: |
-          brew install buildozer
+        run: brew install buildozer
       - name: Select Xcode ${{ env.XCODE_VERSION }}
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
       - name: Clone repo
         uses: actions/checkout@v4
       - name: Clone SwiftSyntax
+        # $SWIFT_SYNTAX_VERSION via env to dodge Semgrep shell-injection rule.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh repo clone apple/swift-syntax -- \
             --depth 1 \
-            --branch ${{ env.SWIFT_SYNTAX_VERSION }} \
+            --branch "$SWIFT_SYNTAX_VERSION" \
             --single-branch
-      - name: Build & Publish SwiftSyntax prebuilt binary
+      - name: Build SwiftSyntax for macos-arm64
+        run: ./build.sh build
+      - name: Upload per-platform staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-macos-arm64
+          path: staging/macos-arm64.tar.gz
+          if-no-files-found: error
+
+  build-linux-x86_64:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_PLATFORM: linux-x86_64
+      # rules_swift's Linux toolchain requires clang; ubuntu-latest defaults to gcc.
+      CC: clang
+      CXX: clang++
+    steps:
+      - name: Install Swift ${{ env.SWIFT_VERSION_LINUX }}
+        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
+        with:
+          swift-version: ${{ env.SWIFT_VERSION_LINUX }}
+      - name: Install clang + buildozer + jq
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang jq
+          curl -sSL -o /tmp/buildozer \
+            https://github.com/bazelbuild/buildtools/releases/latest/download/buildozer-linux-amd64
+          chmod +x /tmp/buildozer
+          sudo mv /tmp/buildozer /usr/local/bin/buildozer
+      - name: Clone repo
+        uses: actions/checkout@v4
+      - name: Clone SwiftSyntax
+        # $SWIFT_SYNTAX_VERSION via env to dodge Semgrep shell-injection rule.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh repo clone apple/swift-syntax -- \
+            --depth 1 \
+            --branch "$SWIFT_SYNTAX_VERSION" \
+            --single-branch
+      - name: Build SwiftSyntax for linux-x86_64
+        run: ./build.sh build
+      - name: Upload per-platform staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-linux-x86_64
+          path: staging/linux-x86_64.tar.gz
+          if-no-files-found: error
 
-          # Run the build and create the archive
-          SWIFT_SYNTAX_VERSION=${{ env.SWIFT_SYNTAX_VERSION }} \
-          RULES_SWIFT_VERSION=${{ env.RULES_SWIFT_VERSION }} \
-          MACOS_VERSION=${{ env.MACOS_VERSION }} \
-          ./build.sh
-      - name: Upload SwiftSyntax prebuilt binary
+  package:
+    needs:
+      - build-macos-arm64
+      - build-linux-x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+      - name: Download per-platform staging artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: staging
+          pattern: staging-*
+          merge-multiple: true
+      - name: Package SwiftSyntax prebuilt archive
+        run: ./build.sh package
+      - name: Upload SwiftSyntax prebuilt archive
         uses: actions/upload-artifact@v4
         with:
           name: swift-syntax
@@ -45,4 +110,3 @@ jobs:
             swift-syntax-${{ env.SWIFT_SYNTAX_VERSION }}.tar.gz
             swift-syntax-${{ env.SWIFT_SYNTAX_VERSION }}.tar.gz.sha256
           if-no-files-found: error
-
