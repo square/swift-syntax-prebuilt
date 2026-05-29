@@ -9,15 +9,15 @@ permissions:
   contents: read
 
 env:
-  SWIFT_SYNTAX_VERSION: 602.0.0
-  XCODE_VERSION: 26.3.0
-  RULES_SWIFT_VERSION: 3.1.2
+  SWIFT_SYNTAX_VERSION: 603.0.1
+  XCODE_VERSION: 26.5.0
+  RULES_SWIFT_VERSION: 3.6.1
   MACOS_VERSION: 13.0
   SWIFT_VERSION_LINUX: "6.2"
 
 jobs:
   build-macos-arm64:
-    runs-on: macos-latest
+    runs-on: macos-26
     env:
       TARGET_PLATFORM: macos-arm64
     steps:
