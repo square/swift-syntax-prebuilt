@@ -316,7 +316,18 @@ do_package() {
   fi
 
   # Dep graph is platform-invariant; any platform's manifest works.
-  local meta_file="$staging_root/${platforms[0]}/_targets.tsv"
+  local meta_platform=""
+  for p in "${platforms[@]}"; do
+    if [[ "$p" == macos-* ]]; then
+      meta_platform="$p"
+      break
+    fi
+  done
+  if [ -z "$meta_platform" ]; then
+    echo "error: no macOS platform found in staging; cannot determine full module list" >&2
+    exit 64
+  fi
+  local meta_file="$staging_root/$meta_platform/_targets.tsv"
   if [ ! -f "$meta_file" ]; then
     echo "error: missing metadata file $meta_file" >&2
     exit 64
@@ -363,17 +374,21 @@ EOF
     case "$kind" in
     swift_import)
       {
+        local -a module_platforms=()
+        for plat in "${platforms[@]}"; do
+          [ -f "$staging_root/$plat/lib${name}.a" ] && module_platforms+=("$plat")
+        done
         printf '\nswift_import(\n'
         printf '    name = "%s",\n' "$name"
         printf '    module_name = "%s",\n' "$name"
         printf '    archives = '
-        emit_select_for_basename list "lib${name}.a" "${platforms[@]}"
+        emit_select_for_basename list "lib${name}.a" "${module_platforms[@]}"
         printf ',\n'
         printf '    swiftdoc = '
-        emit_select_for_basename scalar "${name}.swiftdoc" "${platforms[@]}"
+        emit_select_for_basename scalar "${name}.swiftdoc" "${module_platforms[@]}"
         printf ',\n'
         printf '    swiftinterface = '
-        emit_select_for_basename scalar "${name}.swiftinterface" "${platforms[@]}"
+        emit_select_for_basename scalar "${name}.swiftinterface" "${module_platforms[@]}"
         printf ',\n'
         if [ -n "$deps" ]; then
           # buildozer emits bare, space-separated labels (`:X :Y`); convert
