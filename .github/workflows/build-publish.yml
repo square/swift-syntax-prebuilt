@@ -24,7 +24,7 @@ on:
       rules_swift_version:
         description: 'The version of rules_swift to use for the release archive MODULE'
         required: true
-        default: '3.1.2'
+        default: '3.6.1'
         type: string
       swift_version_linux:
         description: 'The Swift toolchain version to install on the Linux runner'
