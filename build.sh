@@ -131,6 +131,9 @@ EOF
     "--compilation_mode=opt"
     "--cpu=$cpu"
     "--features=swift.emit_swiftinterface"
+    # Also emit `<module>.private.swiftinterface` so that consumers can import SPI.
+    # A public `.swiftinterface` strips all `@_spi` declarations.
+    "--features=swift.emit_private_swiftinterface"
     "--features=swift.enable_library_evolution"
   )
   if [ "$os_family" = "darwin" ]; then
@@ -264,6 +267,19 @@ EOF
     exit 1
   fi
 
+  # Every module must ship a `.private.swiftinterface` next to its public one.
+  # Fail here rather than publishing an archive that looks complete but silently
+  # cannot serve SPI consumers (see swift.emit_private_swiftinterface above).
+  local public_iface
+  while IFS= read -r public_iface; do
+    if [ ! -f "${public_iface%.swiftinterface}.private.swiftinterface" ]; then
+      echo "error: no .private.swiftinterface alongside $(basename "$public_iface") in $platform_dir;" >&2
+      echo "       swift.emit_private_swiftinterface did not take effect" >&2
+      exit 1
+    fi
+  done < <(find "$platform_dir" -maxdepth 1 -type f \
+    -name '*.swiftinterface' ! -name '*.private.swiftinterface')
+
   local platform_tar="$staging_root/${TARGET_PLATFORM}.tar.gz"
   tar -czf "$platform_tar" -C "$staging_root" "$TARGET_PLATFORM"
   echo "build: wrote $platform_tar"
@@ -387,8 +403,19 @@ EOF
         printf '    swiftdoc = '
         emit_select_for_basename scalar "${name}.swiftdoc" "${module_platforms[@]}"
         printf ',\n'
+        # Point `swiftinterface` at the private interface, not the public one:
+        # it is a superset that also carries `@_spi` declarations, which SPI
+        # consumers need. Refuse to fall back to the public interface -- doing so
+        # would produce an archive that fails only later, in consumer builds.
+        for plat in "${module_platforms[@]}"; do
+          if [ ! -f "$staging_root/$plat/${name}.private.swiftinterface" ]; then
+            echo "error: missing $plat/${name}.private.swiftinterface;" >&2
+            echo "       rebuild $plat with swift.emit_private_swiftinterface" >&2
+            exit 1
+          fi
+        done
         printf '    swiftinterface = '
-        emit_select_for_basename scalar "${name}.swiftinterface" "${module_platforms[@]}"
+        emit_select_for_basename scalar "${name}.private.swiftinterface" "${module_platforms[@]}"
         printf ',\n'
         if [ -n "$deps" ]; then
           # buildozer emits bare, space-separated labels (`:X :Y`); convert
