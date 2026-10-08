@@ -113,16 +113,9 @@ module(name = "swift-syntax", version = "$SWIFT_SYNTAX_VERSION", compatibility_l
 bazel_dep(name = "apple_support", version = "$APPLE_SUPPORT_VERSION", repo_name = "build_bazel_apple_support")
 bazel_dep(name = "rules_swift", version = "$RULES_SWIFT_VERSION", repo_name = "build_bazel_rules_swift")
 bazel_dep(name = "rules_apple", version = "$RULES_APPLE_VERSION", repo_name = "build_bazel_rules_apple")
+bazel_dep(name = "rules_cc", version = "0.2.14")
+bazel_dep(name = "platforms", version = "1.0.0")
 EOF
-
-  # swift-syntax's BUILD.bazel through 603.0.1 omits SwiftIfConfig
-  # from SwiftSyntaxMacros' deps even though Package.swift lists it
-  # and the source `public import`s it. Fixed upstream post-603.0.1
-  # in 9acadd6e; patch in place so the prebuilt build doesn't fail
-  # SwiftSyntaxMacros. buildozer exits 3 (no change) if the dep is
-  # already present -- tolerate that under `set -e`.
-  # TODO: remove this after swift-syntax 604.0.0 ships.
-  buildozer "add deps :SwiftIfConfig" //:SwiftSyntaxMacros || [ $? -eq 3 ]
 
   local -a build_flags
   build_flags=(
